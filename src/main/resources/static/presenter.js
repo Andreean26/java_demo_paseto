@@ -1,0 +1,203 @@
+'use strict';
+
+const modeBadge = document.querySelector('#modeBadge');
+const modeHelp = document.querySelector('#modeHelp');
+const modeToggle = document.querySelector('#modeToggle');
+const resetButton = document.querySelector('#resetButton');
+const alertPanel = document.querySelector('#alertPanel');
+const headline = document.querySelector('#headline');
+const subline = document.querySelector('#subline');
+const eventList = document.querySelector('#eventList');
+const audienceUrl = document.querySelector('#audienceUrl');
+
+async function presenterPost(path, body) {
+  try {
+    const response = await fetch(path, {
+      method: 'POST',
+      headers: body ? { 'content-type': 'application/json' } : undefined,
+      body: body ? JSON.stringify(body) : undefined
+    });
+    const payload = await response.json();
+    return { response, payload };
+  } catch {
+    return {
+      response: null,
+      payload: { ok: false, error: 'Server tidak dapat dihubungi.' }
+    };
+  }
+}
+
+function setMode(mode) {
+  const secure = mode === 'paseto';
+  modeToggle.checked = secure;
+  modeBadge.textContent = secure ? 'PASETO Secure' : 'JWT Vulnerable';
+  modeBadge.classList.toggle('secure', secure);
+  modeHelp.textContent = secure
+    ? 'Token terenkripsi dan tamper-proof untuk demo pertahanan.'
+    : 'JWT menerima alg:none untuk demo serangan.';
+}
+
+function renderEvents(events) {
+  eventList.innerHTML = '';
+  if (!events.length) {
+    const empty = document.createElement('p');
+    empty.className = 'muted';
+    empty.textContent = 'Belum ada event.';
+    eventList.append(empty);
+    return;
+  }
+
+  for (const event of events) {
+    const item = document.createElement('div');
+    item.className = 'event-item';
+
+    const title = document.createElement('strong');
+    title.textContent = event.title || event.type;
+
+    const detail = document.createElement('small');
+    const date = new Date(event.at);
+    detail.textContent = `${date.toLocaleTimeString()} - ${event.warning || event.detail || event.mode || ''}`;
+
+    item.append(title, detail);
+    eventList.append(item);
+  }
+}
+
+function showBreach(event) {
+  headline.textContent = 'SISTEM DIRETAS';
+  subline.textContent = `Oleh: ${event.name || 'Anonim'}`;
+  alertPanel.classList.remove('breach');
+  window.requestAnimationFrame(() => {
+    alertPanel.classList.add('breach');
+  });
+}
+
+async function loadState() {
+  const response = await fetch('/api/state');
+  const payload = await response.json();
+  setMode(payload.mode);
+  renderEvents(payload.events || []);
+}
+
+async function changeMode() {
+  const mode = modeToggle.checked ? 'paseto' : 'jwt';
+  modeToggle.disabled = true;
+  const { response, payload } = await presenterPost('/api/mode', { mode });
+  if (!response || !response.ok) {
+    await loadState().catch(() => {});
+    subline.textContent = payload.error || 'Mode gagal diganti.';
+    modeToggle.disabled = false;
+    return;
+  }
+
+  setMode(payload.mode);
+  headline.textContent = payload.mode === 'paseto' ? 'Benteng aktif' : 'Sistem menunggu';
+  subline.textContent =
+    payload.mode === 'paseto'
+      ? 'Sekarang token secure akan menolak modifikasi satu karakter pun.'
+      : 'Mode JWT rentan aktif. Biarkan audiens mencoba alg:none.';
+  alertPanel.classList.remove('breach');
+  modeToggle.disabled = false;
+}
+
+async function resetEvents() {
+  resetButton.disabled = true;
+  const { response, payload } = await presenterPost('/api/reset');
+  if (!response || !response.ok) {
+    subline.textContent = payload.error || 'Event gagal dibersihkan.';
+    resetButton.disabled = false;
+    return;
+  }
+
+  renderEvents(payload.events || []);
+  headline.textContent = 'Sistem menunggu';
+  subline.textContent = 'Belum ada peserta yang berhasil membuka brankas.';
+  alertPanel.classList.remove('breach');
+  resetButton.disabled = false;
+}
+
+function connectEvents() {
+  const stream = new EventSource('/events');
+
+  stream.addEventListener('snapshot', (message) => {
+    const payload = JSON.parse(message.data);
+    setMode(payload.mode);
+    renderEvents(payload.events || []);
+  });
+
+  stream.addEventListener('mode', (message) => {
+    const event = JSON.parse(message.data);
+    setMode(event.mode);
+    loadState();
+  });
+
+  stream.addEventListener('hacked', (message) => {
+    const event = JSON.parse(message.data);
+    showBreach(event);
+    loadState();
+  });
+
+  stream.addEventListener('blocked', () => {
+    loadState();
+  });
+}
+
+audienceUrl.textContent = `${window.location.origin}/audience.html`;
+modeToggle.addEventListener('change', changeMode);
+resetButton.addEventListener('click', resetEvents);
+
+loadState().then(connectEvents).catch(() => {
+  eventList.textContent = 'Tidak bisa terhubung ke server.';
+});
+
+/* ============================================================================
+   COACH MARK / GUIDED TOUR PRESENTER
+   ============================================================================ */
+const presenterTourSteps = [
+  {
+    element: '.mode-card',
+    title: 'Langkah 1: Kontrol Mode Keamanan Live',
+    description: 'Toggle saklar ini untuk berganti secara instan antara <strong>JWT (Vulnerable)</strong> dan <strong>PASETO (Secure)</strong>. Seluruh browser audiens akan mengikuti perubahan tanpa refresh.'
+  },
+  {
+    element: '#alertPanel',
+    title: 'Langkah 2: Status Panggung Proyektor',
+    description: 'Layar ini akan berubah merah menyala dengan pengumuman besar saat ada audiens yang berhasil membobol vault menggunakan serangan <code>alg:none</code>.'
+  },
+  {
+    element: '#audienceUrl',
+    title: 'Langkah 3: URL Akses Peserta',
+    description: 'Tampilkan URL ini di layar proyektor agar peserta seminar/workshop dapat membuka halaman Audience di gadget masing-masing.'
+  },
+  {
+    element: '#eventList',
+    title: 'Langkah 4: Live Audit Stream (SSE)',
+    description: 'Audit log real-time bertenaga Server-Sent Events. Memantau setiap percobaan login, pelanggaran signature, dan aksi penyerangan.'
+  },
+  {
+    element: '#resetButton',
+    title: 'Langkah 5: Reset Panggung',
+    description: 'Klik tombol ini untuk membersihkan riwayat event dan mengembalikan panggung ke status awal sebelum sesi demo berikutnya.'
+  }
+];
+
+function startPresenterTour() {
+  if (window.CoachMark) {
+    window.CoachMark.start(presenterTourSteps, {
+      onComplete: () => {
+        localStorage.setItem('tour_seen_presenter', 'true');
+      }
+    });
+  }
+}
+
+const startTourBtn = document.querySelector('#startTourBtn');
+if (startTourBtn) {
+  startTourBtn.addEventListener('click', startPresenterTour);
+}
+
+if (!localStorage.getItem('tour_seen_presenter')) {
+  setTimeout(() => {
+    startPresenterTour();
+  }, 800);
+}
