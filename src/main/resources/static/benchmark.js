@@ -418,9 +418,9 @@ runBtn.addEventListener('click', () => runBenchmark());
 // Render environment badge immediately on page load without waiting for benchmark trigger
 function renderEnvironmentBadge(env) {
   if (!env) return;
-  const jVersion = env.javaVersion || '17';
+  const javaVer = env.javaMajorVersion ? `Java ${env.javaMajorVersion}` : `Java ${env.javaVersion ? env.javaVersion.split('.')[0] : '17'}`;
   const sVersion = env.springBootVersion ? ` / Spring Boot ${env.springBootVersion}` : '';
-  if (envNode) envNode.textContent = `Java ${jVersion}${sVersion}`;
+  if (envNode) envNode.textContent = `${javaVer}${sVersion}`;
   const cpuName = env.cpuModel || env.arch;
   const osText = env.platform ? ` \u2022 ${env.platform}` : '';
   if (envArch) envArch.textContent = `${env.cpus} CPU Cores \u2022 ${cpuName}${osText}`;

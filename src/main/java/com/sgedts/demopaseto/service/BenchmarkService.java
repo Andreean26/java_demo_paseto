@@ -543,6 +543,7 @@ public class BenchmarkService {
     public Map<String, Object> getEnvironmentInfo() {
         Map<String, Object> environment = new LinkedHashMap<>();
         environment.put("javaVersion", System.getProperty("java.version"));
+        environment.put("javaMajorVersion", System.getProperty("java.specification.version"));
         environment.put("javaVm", System.getProperty("java.vm.name"));
         environment.put("javaVendor", System.getProperty("java.vendor"));
         environment.put("springBootVersion", org.springframework.boot.SpringBootVersion.getVersion());
