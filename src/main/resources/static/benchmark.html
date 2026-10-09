@@ -13,7 +13,7 @@
         <span>Live Demo PASETO</span>
       </div>
       <div style="display: flex; align-items: center; gap: 12px;">
-        <button class="tour-btn" id="startTourBtn" type="button">💡 Panduan Demo</button>
+        <!-- <button class="tour-btn" id="startTourBtn" type="button">💡 Panduan Demo</button> -->
         <nav class="nav-links" aria-label="Halaman demo">
           <a href="/audience.html">Audience</a>
           <a href="/presenter.html">Presenter</a>
@@ -34,8 +34,8 @@
         </div>
         <div class="benchmark-meta-badge" id="envBadge">
           <span>Environment Engine</span>
-          <strong id="envNode">Java 21 / Spring Boot 3</strong>
-          <small id="envArch">Memuat arsitektur...</small>
+          <strong id="envNode">Memuat runtime JVM...</strong>
+          <small id="envArch">Mendeteksi hardware & CPU...</small>
         </div>
       </section>
 
@@ -48,9 +48,8 @@
           </div>
           <div class="controls-actions">
             <button class="primary-button" id="runBtn" type="button">
-              <span id="runBtnText">&#9889; Jalankan Benchmark (10x Sampel)</span>
+              <span id="runBtnText">Jalankan Benchmark</span>
             </button>
-            <button class="quiet-button" id="quickBtn" type="button">Uji Cepat (10 Putaran)</button>
           </div>
         </div>
 
@@ -87,17 +86,22 @@
         <div class="panel kpi-card">
           <div class="kpi-label">JWT (HS256) Throughput</div>
           <div class="kpi-value cyan" id="kpiJwtRoundtrip">-</div>
-          <div class="kpi-sub" id="kpiJwtSub">Rata-rata Ops/Detik (Signing + Verify)</div>
+          <div class="kpi-sub" id="kpiJwtSub">Symmetric MAC (HMAC-SHA256)</div>
         </div>
         <div class="panel kpi-card">
           <div class="kpi-label">PASETO (v4.local) Throughput</div>
           <div class="kpi-value green" id="kpiPasetoLocRoundtrip">-</div>
-          <div class="kpi-sub" id="kpiPasetoLocSub">Rata-rata Ops/Detik (AEAD Encrypt + Decrypt)</div>
+          <div class="kpi-sub" id="kpiPasetoLocSub">Symmetric AEAD (XChaCha20 + BLAKE2b-MAC)</div>
+        </div>
+        <div class="panel kpi-card">
+          <div class="kpi-label">JWT (EdDSA / Ed25519) Throughput</div>
+          <div class="kpi-value indigo" id="kpiJwtEddsaRoundtrip">-</div>
+          <div class="kpi-sub" id="kpiJwtEddsaSub">Asymmetric Signature (Ed25519 RFC 8037) ⚖️</div>
         </div>
         <div class="panel kpi-card">
           <div class="kpi-label">PASETO (v4.public) Throughput</div>
           <div class="kpi-value yellow" id="kpiPasetoPubRoundtrip">-</div>
-          <div class="kpi-sub" id="kpiPasetoPubSub">Rata-rata Ops/Detik (Asymmetric Ed25519)</div>
+          <div class="kpi-sub" id="kpiPasetoPubSub">Asymmetric Signature (Ed25519 EdDSA) ⚖️</div>
         </div>
       </section>
 
@@ -110,6 +114,7 @@
           </div>
           <div class="chart-legend">
             <span class="legend-item"><span class="legend-dot jwt-dot"></span> JWT (HS256)</span>
+            <span class="legend-item"><span class="legend-dot jwt-eddsa-dot"></span> JWT (EdDSA / Ed25519)</span>
             <span class="legend-item"><span class="legend-dot paseto-dot"></span> PASETO (v4.local)</span>
             <span class="legend-item"><span class="legend-dot paseto-pub-dot"></span> PASETO (v4.public)</span>
           </div>
@@ -141,6 +146,7 @@
           </div>
           <div class="chart-legend">
             <span class="legend-item"><span class="legend-dot jwt-dot"></span> JWT (HS256)</span>
+            <span class="legend-item"><span class="legend-dot jwt-eddsa-dot"></span> JWT (EdDSA / Ed25519)</span>
             <span class="legend-item"><span class="legend-dot paseto-dot"></span> PASETO (v4.local)</span>
             <span class="legend-item"><span class="legend-dot paseto-pub-dot"></span> PASETO (v4.public)</span>
           </div>
@@ -182,6 +188,7 @@
           </div>
           <div class="token-tabs" id="tokenTabs">
             <button class="tab-btn active" data-target="jwt">JWT HS256</button>
+            <button class="tab-btn" data-target="jwtEddsa">JWT EdDSA (Ed25519)</button>
             <button class="tab-btn" data-target="pasetoLoc">PASETO v4.local</button>
             <button class="tab-btn" data-target="pasetoPub">PASETO v4.public</button>
           </div>
@@ -217,45 +224,57 @@
               <tr>
                 <td><strong>Kerentanan <code>alg:none</code> & Header Spoofing</strong></td>
                 <td><span class="badge badge-danger">Rentan secara Desain</span><br><small>Header token menentukan algoritma. Bug implementasi sering membiarkan <code>alg:none</code> atau key confusion attack.</small></td>
-                <td><span class="badge badge-success">Kebal / No Algorithm Agility</span><br><small>Algoritma terkunci permanen pada versi protokol (contoh: v3/v4). Header tidak bisa diubah.</small></td>
+                <td><span class="badge badge-success">No Algorithm Agility</span><br><small>Algoritma terkunci permanen pada versi protokol (v4.local / v4.public). Header tidak bisa diubah.</small></td>
               </tr>
               <tr>
                 <td><strong>Pilihan Primitif Kriptografi</strong></td>
                 <td><span class="badge badge-neutral">Terlalu Fleksibel</span><br><small>Mendukung puluhan kombinasi cipher, termasuk yang sudah usang atau lemah jika salah konfigurasi.</small></td>
-                <td><span class="badge badge-success">Modern & Terstandarisasi</span><br><small>Hanya menggunakan primitif kriptografi terkuat (AES-256, Ed25519, ChaCha20Poly1305, BLAKE2b).</small></td>
+                <td><span class="badge badge-success">Modern & Terstandarisasi</span><br><small>Hanya menggunakan primitif kriptografi terkuat (AES-256, Ed25519, XChaCha20, BLAKE2b).</small></td>
               </tr>
               <tr>
-                <td><strong>Ketahanan Terhadap Tampering</strong></td>
-                <td><span class="badge badge-neutral">Tergantung Algoritma & Validasi</span><br><small>Jika parsing payload dilakukan sebelum verifikasi signature, data tidak sah berpotensi bocor.</small></td>
-                <td><span class="badge badge-success">AEAD Terautentikasi Penuh</span><br><small>Perubahan 1 bit membuat seluruh proses dekripsi gagal seketika sebelum data dibaca.</small></td>
+                <td><strong>Kecepatan Eksekusi & Latensi (Throughput)</strong></td>
+                <td>
+                  <span class="badge badge-warning">Cepat di HS256, Lambat di EdDSA</span><br>
+                  <div style="margin-top: 6px; line-height: 1.55; font-size: 0.92rem;">
+                    <strong style="color: var(--cyan);">&#8226; HS256 (MAC):</strong> <span id="matrixJwtHsOps">~16.000 ops/s</span> (<span id="matrixJwtHsLat">0.067 ms</span>)<br>
+                    <strong style="color: #818cf8;">&#8226; EdDSA (Ed25519):</strong> <span id="matrixJwtEddsaOps">~730 ops/s</span> (<span id="matrixJwtEddsaLat">1.524 ms</span>)<br>
+                    <small style="color: var(--muted); display: block; margin-top: 4px;">Terbebani 2x JSON parsing (header & claims) dan 3x Base64Url decode di tiap token.</small>
+                  </div>
+                </td>
+                <td>
+                  <span class="badge badge-success">Unggul Telak (Low Overhead)</span><br>
+                  <div style="margin-top: 6px; line-height: 1.55; font-size: 0.92rem;">
+                    <strong style="color: var(--green);">&#8226; v4.local (AEAD):</strong> <span id="matrixPasetoLocOps">~26.400 ops/s</span> (<span id="matrixPasetoLocLat">0.038 ms</span>) <br>
+                    <strong style="color: var(--yellow);">&#8226; v4.public (Ed25519):</strong> <span id="matrixPasetoPubOps">~7.600 ops/s</span> (<span id="matrixPasetoPubLat">0.134 ms</span>) <br>
+                    <small style="color: var(--green); display: block; margin-top: 4px;">v4.public 10x lebih cepat dari JWT EdDSA! v4.local lebih cepat dari JWT HS256 berkat cipher native XChaCha20.</small>
+                  </div>
+                </td>
               </tr>
               <tr>
-                <td><strong>Kecepatan Eksekusi (Throughput)</strong></td>
-                <td><span class="badge badge-success">Sangat Cepat (Signing Saja)</span><br><small>Hanya melakukan satu kali hash HMAC sederhana tanpa enkripsi payload.</small></td>
-                <td><span class="badge badge-success">Cepat & Aman</span><br><small>Sedikit overhead tambahan karena enkripsi AEAD penuh, namun sangat optimal untuk server modern.</small></td>
-              </tr>
-              <tr>
-                <td><strong>Ukuran Token (Overhead)</strong></td>
-                <td><span class="badge badge-success">Sedikit Lebih Ringkas</span><br><small>Overhead ~100-140 bytes (Header mini + 32-byte signature HMAC-SHA256).</small></td>
-                <td><span class="badge badge-neutral">Sedikit Lebih Besar</span><br><small>Overhead ~150-190 bytes (Menyimpan Nonce dinamis + AEAD Authentication Tag 48-byte).</small></td>
-              </tr>
-              <tr>
-                <td><strong>Standarisasi Key Management</strong></td>
-                <td><span class="badge badge-danger">Sering Menggunakan Secret Lemah</span><br><small>Sering kali developer menggunakan string pendek ("secret123") yang rentan brute-force.</small></td>
-                <td><span class="badge badge-success">Enforced Key Size</span><br><small>Secara tegas mewajibkan key berukuran tepat 256-bit atau 384-bit (menolak secret lemah).</small></td>
-              </tr>
-              <tr>
-                <td><strong>Rekomendasi Penggunaan</strong></td>
-                <td>Untuk integrasi sistem lama (Legacy OAuth2/OIDC) yang membutuhkan kepatuhan RFC 7519.</td>
-                <td><strong class="green-text">Sangat Direkomendasikan</strong> untuk arsitektur modern microservices, mobile app auth, dan sesi internal aman.</td>
-              </tr>
+                <td><strong>Ukuran Token & Overhead Bytes</strong></td>
+                <td>
+                  <span class="badge badge-neutral">Overhead +157 B s/d +200 B (+57% - 72%)</span><br>
+                  <div style="margin-top: 6px; line-height: 1.55; font-size: 0.92rem;">
+                    <strong style="color: var(--cyan);">&#8226; HS256:</strong> <span id="matrixJwtHsSize">433 Bytes</span> (+157 B overhead)<br>
+                    <strong style="color: #818cf8;">&#8226; EdDSA:</strong> <span id="matrixJwtEddsaSize">476 Bytes</span> (+200 B overhead)<br>
+                    <small style="color: var(--muted); display: block; margin-top: 4px;">Header Base64Url 20 B + Signature 43 B (HS256) atau 86 B (EdDSA).</small>
+                  </div>
+                </td>
+                <td>
+                  <span class="badge badge-success">Sangat Ringkas (+187 B / +68%)</span><br>
+                  <div style="margin-top: 6px; line-height: 1.55; font-size: 0.92rem;">
+                    <strong style="color: var(--green);">&#8226; v4.local:</strong> <span id="matrixPasetoLocSize">463 Bytes</span> (+187 B overhead)<br>
+                    <strong style="color: var(--yellow);">&#8226; v4.public:</strong> <span id="matrixPasetoPubSize">464 Bytes</span> (+188 B overhead)<br>
+                    <small style="color: var(--green); display: block; margin-top: 4px;">Pada mode Ed25519, PASETO v4.public justru 12 Byte LEBIH KECIL dari JWT EdDSA (464 B vs 476 B)!</small>
+                  </div>
+                </td>
             </tbody>
           </table>
         </div>
       </section>
     </main>
 
-    <script src="/coachmark.js"></script>
-    <script src="/benchmark.js"></script>
+    <script src="/coachmark.js?v=2.0"></script>
+    <script src="/benchmark.js?v=2.0"></script>
   </body>
 </html>

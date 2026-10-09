@@ -35,4 +35,9 @@ public class BenchmarkController {
             @RequestBody(required = false) Map<String, Object> body) throws Exception {
         return ResponseEntity.ok(benchmarkService.runBenchmark(body != null ? body : Map.of()));
     }
+
+    @GetMapping("/environment")
+    public ResponseEntity<Map<String, Object>> getEnvironment() {
+        return ResponseEntity.ok(benchmarkService.getEnvironmentInfo());
+    }
 }

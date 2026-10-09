@@ -45,7 +45,6 @@ public class VaultController {
         }
 
         DemoMode mode = stateService.getMode();
-
         if (mode == DemoMode.JWT) {
             return handleJwt(token);
         } else {
@@ -82,7 +81,7 @@ public class VaultController {
             Map<String, Object> body = new LinkedHashMap<>();
             body.put("ok", false);
             body.put("status", "DENIED");
-            body.put("message", "Token valid, tapi role masih USER. Ubah payload kalau berani.");
+            body.put("message", "Token valid, Role USER tidak memiliki hak akses. Otorisasi brankas memerlukan hak akses ADMIN. ");
             body.put("claims", claims);
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body(body);
 
@@ -96,11 +95,11 @@ public class VaultController {
         try {
             Map<String, Object> claims = pasetoService.verifyToken(token);
             Map<String, Object> body = new LinkedHashMap<>();
-            body.put("ok", false);
-            body.put("status", "DENIED");
-            body.put("message", "Token secure valid, tapi role tetap USER. Brankas tetap terkunci.");
+            body.put("ok", true);
+            body.put("status", "VERIFIED");
+            body.put("message", "Token PASETO v4 valid & autentik! Server berhasil memverifikasi integritas dan keaslian token.");
             body.put("claims", claims);
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(body);
+            return ResponseEntity.ok(body);
         } catch (Exception e) {
             Map<String, Object> payload = new LinkedHashMap<>();
             payload.put("title", "Percobaan token secure diblokir");

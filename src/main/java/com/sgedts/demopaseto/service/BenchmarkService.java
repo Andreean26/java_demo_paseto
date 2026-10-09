@@ -17,6 +17,7 @@ public class BenchmarkService {
     private final SecretKey pasetoV4SecretKey;
     private final PrivateKey pasetoV4PrivateKey;
     private final PublicKey pasetoV4PublicKey;
+    private final java.security.KeyPair pasetoV4KeyPair;
     private final ObjectMapper objectMapper;
 
     // Payload presets identical to JS original
@@ -123,17 +124,19 @@ public class BenchmarkService {
                             @Qualifier("pasetoV4SecretKey") SecretKey pasetoV4SecretKey,
                             @Qualifier("pasetoV4PrivateKey") PrivateKey pasetoV4PrivateKey,
                             @Qualifier("pasetoV4PublicKey") PublicKey pasetoV4PublicKey,
+                            @Qualifier("pasetoV4KeyPair") java.security.KeyPair pasetoV4KeyPair,
                             ObjectMapper objectMapper) {
         this.jwtSecretKey = jwtSecretKey;
         this.pasetoV4SecretKey = pasetoV4SecretKey;
         this.pasetoV4PrivateKey = pasetoV4PrivateKey;
         this.pasetoV4PublicKey = pasetoV4PublicKey;
+        this.pasetoV4KeyPair = pasetoV4KeyPair;
         this.objectMapper = objectMapper;
     }
 
     /**
      * Calculate latency statistics from nanosecond durations.
-     * Returns values in microseconds.
+     * Returns values in milliseconds (ms).
      */
     public Map<String, Double> calculateStats(List<Long> latenciesNanos) {
         if (latenciesNanos.isEmpty()) {
@@ -143,17 +146,17 @@ public class BenchmarkService {
             return zero;
         }
 
-        List<Double> us = latenciesNanos.stream()
-                .map(n -> n / 1000.0)
+        List<Double> ms = latenciesNanos.stream()
+                .map(n -> n / 1_000_000.0)
                 .sorted()
                 .toList();
 
-        double min = round2(us.get(0));
-        double max = round2(us.get(us.size() - 1));
-        double mean = round2(us.stream().mapToDouble(Double::doubleValue).average().orElse(0));
-        double p50 = round2(us.get((int) Math.floor(us.size() * 0.5)));
-        double p95 = round2(us.get((int) Math.floor(us.size() * 0.95)));
-        double p99 = round2(us.get((int) Math.floor(us.size() * 0.99)));
+        double min = round3(ms.get(0));
+        double max = round3(ms.get(ms.size() - 1));
+        double mean = round3(ms.stream().mapToDouble(Double::doubleValue).average().orElse(0));
+        double p50 = round3(ms.get((int) Math.floor(ms.size() * 0.5)));
+        double p95 = round3(ms.get((int) Math.floor(ms.size() * 0.95)));
+        double p99 = round3(ms.get((int) Math.floor(ms.size() * 0.99)));
 
         Map<String, Double> stats = new LinkedHashMap<>();
         stats.put("min", min);
@@ -165,8 +168,8 @@ public class BenchmarkService {
         return stats;
     }
 
-    private double round2(double v) {
-        return Math.round(v * 100.0) / 100.0;
+    private double round3(double v) {
+        return Math.round(v * 1000.0) / 1000.0;
     }
 
     public Map<String, Object> runBenchmark(Map<String, Object> options) throws Exception {
@@ -182,16 +185,17 @@ public class BenchmarkService {
 
 
 
-        // Warmup (15x each operation)
-        for (int i = 0; i < 15; i++) {
+        // Warmup (300x each operation to trigger HotSpot C2 tier-4 JIT compilation)
+        for (int i = 0; i < 300; i++) {
             String tw = buildJwt(basePayload);
             verifyJwt(tw);
+            String twEd = buildJwtEddsa(basePayload);
+            verifyJwtEddsa(twEd);
             String tp = buildPasetoLocal(rawJson);
             verifyPasetoLocal(tp);
             String tpub = buildPasetoPublic(rawJson);
             verifyPasetoPublic(tpub);
         }
-
         int requestedIter = getInt(options, "iterations", 1000);
         int opsPerRound = Math.max(10, Math.min((int) Math.round((double) requestedIter / rounds), 200));
         int totalOps = rounds * opsPerRound;
@@ -199,15 +203,17 @@ public class BenchmarkService {
         List<Map<String, Object>> roundsHistory = new ArrayList<>();
         List<Long> allJwtSignLat = new ArrayList<>();
         List<Long> allJwtVerifyLat = new ArrayList<>();
+        List<Long> allJwtEddsaSignLat = new ArrayList<>();
+        List<Long> allJwtEddsaVerifyLat = new ArrayList<>();
         List<Long> allPasLocEncLat = new ArrayList<>();
         List<Long> allPasLocDecLat = new ArrayList<>();
         List<Long> allPasPubSignLat = new ArrayList<>();
         List<Long> allPasPubVerifyLat = new ArrayList<>();
 
         String sampleJwt = "";
+        String sampleJwtEddsa = "";
         String samplePasLoc = "";
         String samplePasPub = "";
-
         for (int r = 0; r < rounds; r++) {
             // JWT HS256 sign
             long startJwtSign = System.nanoTime();
@@ -229,7 +235,24 @@ public class BenchmarkService {
             long endJwtVerify = System.nanoTime();
             double roundJwtVerifyMs = (endJwtVerify - startJwtVerify) / 1_000_000.0;
 
-            // PASETO local encrypt
+            // 2. JWT EdDSA (Ed25519 Asymmetric) sign & verify
+            long startJwtEddsaSign = System.nanoTime();
+            for (int i = 0; i < opsPerRound; i++) {
+                long t0 = System.nanoTime();
+                sampleJwtEddsa = buildJwtEddsa(basePayload);
+                allJwtEddsaSignLat.add(System.nanoTime() - t0);
+            }
+            long endJwtEddsaSign = System.nanoTime();
+            double roundJwtEddsaSignMs = (endJwtEddsaSign - startJwtEddsaSign) / 1_000_000.0;
+
+            long startJwtEddsaVerify = System.nanoTime();
+            for (int i = 0; i < opsPerRound; i++) {
+                long t0 = System.nanoTime();
+                verifyJwtEddsa(sampleJwtEddsa);
+                allJwtEddsaVerifyLat.add(System.nanoTime() - t0);
+            }
+            long endJwtEddsaVerify = System.nanoTime();
+            double roundJwtEddsaVerifyMs = (endJwtEddsaVerify - startJwtEddsaVerify) / 1_000_000.0;
             long startLocEnc = System.nanoTime();
             for (int i = 0; i < opsPerRound; i++) {
                 long t0 = System.nanoTime();
@@ -276,21 +299,31 @@ public class BenchmarkService {
             jwtHsRound.put("signOpsSec", safeOps(opsPerRound, roundJwtSignMs));
             jwtHsRound.put("verifyOpsSec", safeOps(opsPerRound, roundJwtVerifyMs));
             jwtHsRound.put("roundtripOpsSec", safeOps(opsPerRound, roundJwtSignMs + roundJwtVerifyMs));
-            jwtHsRound.put("avgLatencyUs", round1((roundJwtSignMs + roundJwtVerifyMs) * 1000 / opsPerRound));
+            double jwtLatMs = round3((roundJwtSignMs + roundJwtVerifyMs) / opsPerRound);
+            jwtHsRound.put("avgLatencyMs", jwtLatMs);
             roundData.put("jwtHs", jwtHsRound);
 
+            Map<String, Object> jwtEddsaRound = new LinkedHashMap<>();
+            jwtEddsaRound.put("signOpsSec", safeOps(opsPerRound, roundJwtEddsaSignMs));
+            jwtEddsaRound.put("verifyOpsSec", safeOps(opsPerRound, roundJwtEddsaVerifyMs));
+            jwtEddsaRound.put("roundtripOpsSec", safeOps(opsPerRound, roundJwtEddsaSignMs + roundJwtEddsaVerifyMs));
+            double jwtEddsaLatMs = round3((roundJwtEddsaSignMs + roundJwtEddsaVerifyMs) / opsPerRound);
+            jwtEddsaRound.put("avgLatencyMs", jwtEddsaLatMs);
+            roundData.put("jwtEddsa", jwtEddsaRound);
             Map<String, Object> pasetoLocRound = new LinkedHashMap<>();
             pasetoLocRound.put("encryptOpsSec", safeOps(opsPerRound, roundLocEncMs));
             pasetoLocRound.put("decryptOpsSec", safeOps(opsPerRound, roundLocDecMs));
             pasetoLocRound.put("roundtripOpsSec", safeOps(opsPerRound, roundLocEncMs + roundLocDecMs));
-            pasetoLocRound.put("avgLatencyUs", round1((roundLocEncMs + roundLocDecMs) * 1000 / opsPerRound));
+            double locLatMs = round3((roundLocEncMs + roundLocDecMs) / opsPerRound);
+            pasetoLocRound.put("avgLatencyMs", locLatMs);
             roundData.put("pasetoLoc", pasetoLocRound);
 
             Map<String, Object> pasetoPubRound = new LinkedHashMap<>();
             pasetoPubRound.put("signOpsSec", safeOps(opsPerRound, roundPubSignMs));
             pasetoPubRound.put("verifyOpsSec", safeOps(opsPerRound, roundPubVerifyMs));
             pasetoPubRound.put("roundtripOpsSec", safeOps(opsPerRound, roundPubSignMs + roundPubVerifyMs));
-            pasetoPubRound.put("avgLatencyUs", round1((roundPubSignMs + roundPubVerifyMs) * 1000 / opsPerRound));
+            double pubLatMs = round3((roundPubSignMs + roundPubVerifyMs) / opsPerRound);
+            pasetoPubRound.put("avgLatencyMs", pubLatMs);
             roundData.put("pasetoPub", pasetoPubRound);
 
             roundsHistory.add(roundData);
@@ -300,17 +333,22 @@ public class BenchmarkService {
         long avgJwtSignOps = avgLong(roundsHistory, "jwtHs", "signOpsSec");
         long avgJwtVerifyOps = avgLong(roundsHistory, "jwtHs", "verifyOpsSec");
         long avgJwtRoundtripOps = avgLong(roundsHistory, "jwtHs", "roundtripOpsSec");
-        double avgJwtLatUs = avgDouble(roundsHistory, "jwtHs", "avgLatencyUs");
+        double avgJwtLatMs = avgDouble(roundsHistory, "jwtHs", "avgLatencyMs");
+
+        long avgJwtEddsaSignOps = avgLong(roundsHistory, "jwtEddsa", "signOpsSec");
+        long avgJwtEddsaVerifyOps = avgLong(roundsHistory, "jwtEddsa", "verifyOpsSec");
+        long avgJwtEddsaRoundtripOps = avgLong(roundsHistory, "jwtEddsa", "roundtripOpsSec");
+        double avgJwtEddsaLatMs = avgDouble(roundsHistory, "jwtEddsa", "avgLatencyMs");
 
         long avgLocEncOps = avgLong(roundsHistory, "pasetoLoc", "encryptOpsSec");
         long avgLocDecOps = avgLong(roundsHistory, "pasetoLoc", "decryptOpsSec");
         long avgLocRoundtripOps = avgLong(roundsHistory, "pasetoLoc", "roundtripOpsSec");
-        double avgLocLatUs = avgDouble(roundsHistory, "pasetoLoc", "avgLatencyUs");
+        double avgLocLatMs = avgDouble(roundsHistory, "pasetoLoc", "avgLatencyMs");
 
         long avgPubSignOps = avgLong(roundsHistory, "pasetoPub", "signOpsSec");
         long avgPubVerifyOps = avgLong(roundsHistory, "pasetoPub", "verifyOpsSec");
         long avgPubRoundtripOps = avgLong(roundsHistory, "pasetoPub", "roundtripOpsSec");
-        double avgPubLatUs = avgDouble(roundsHistory, "pasetoPub", "avgLatencyUs");
+        double avgPubLatMs = avgDouble(roundsHistory, "pasetoPub", "avgLatencyMs");
 
         // JWT HS256 token stats
         int jwtByteSize = sampleJwt.getBytes("UTF-8").length;
@@ -325,19 +363,34 @@ public class BenchmarkService {
                 },
                 "sign", avgJwtSignOps, calculateStats(allJwtSignLat),
                 "verify", avgJwtVerifyOps, calculateStats(allJwtVerifyLat),
-                avgJwtRoundtripOps, avgJwtLatUs,
+                avgJwtRoundtripOps, avgJwtLatMs,
                 true
         );
 
-        // PASETO local token stats
+        // JWT EdDSA (Ed25519) token stats
+        int jwtEddsaByteSize = sampleJwtEddsa.getBytes("UTF-8").length;
+        String[] jwtEddsaParts = sampleJwtEddsa.split("\\.");
+        Map<String, Object> jwtEddsaStats = buildTokenStats(
+                "JWT (EdDSA / Ed25519)", "Asymmetric (Ed25519 / RFC 8037)",
+                sampleJwtEddsa, jwtEddsaByteSize, rawPayloadBytes,
+                new int[]{
+                        jwtEddsaParts.length > 0 ? jwtEddsaParts[0].getBytes("UTF-8").length : 0,
+                        jwtEddsaParts.length > 1 ? jwtEddsaParts[1].getBytes("UTF-8").length : 0,
+                        jwtEddsaParts.length > 2 ? jwtEddsaParts[2].getBytes("UTF-8").length : 0
+                },
+                "sign", avgJwtEddsaSignOps, calculateStats(allJwtEddsaSignLat),
+                "verify", avgJwtEddsaVerifyOps, calculateStats(allJwtEddsaVerifyLat),
+                avgJwtEddsaRoundtripOps, avgJwtEddsaLatMs,
+                true
+        );
         int locByteSize = samplePasLoc.getBytes("UTF-8").length;
         Map<String, Object> pasetoLocStats = buildTokenStats(
-                "PASETO (v4.local / ChaCha20-Poly1305)", "Symmetric AEAD (ChaCha20 + BLAKE2b-MAC)",
+                "PASETO (v4.local / XChaCha20 + BLAKE2b)", "Symmetric AEAD (XChaCha20 + BLAKE2b-MAC)",
                 samplePasLoc, locByteSize, rawPayloadBytes,
-                new int[]{9, locByteSize - 9 - 32 - 32, 32},
+                new int[]{9, locByteSize - 9 - 43, 43},
                 "encrypt", avgLocEncOps, calculateStats(allPasLocEncLat),
                 "decrypt", avgLocDecOps, calculateStats(allPasLocDecLat),
-                avgLocRoundtripOps, avgLocLatUs,
+                avgLocRoundtripOps, avgLocLatMs,
                 false
         );
 
@@ -346,20 +399,15 @@ public class BenchmarkService {
         Map<String, Object> pasetoPubStats = buildTokenStats(
                 "PASETO (v4.public / Ed25519)", "Asymmetric (Ed25519 / EdDSA)",
                 samplePasPub, pubByteSize, rawPayloadBytes,
-                new int[]{10, pubByteSize - 10 - 64, 64},
+                new int[]{10, pubByteSize - 10 - 86, 86},
                 "sign", avgPubSignOps, calculateStats(allPasPubSignLat),
                 "verify", avgPubVerifyOps, calculateStats(allPasPubVerifyLat),
-                avgPubRoundtripOps, avgPubLatUs,
+                avgPubRoundtripOps, avgPubLatMs,
                 true
         );
 
-        // Environment info
-        Map<String, Object> environment = new LinkedHashMap<>();
-        environment.put("javaVersion", "Java 21 / Spring Boot 3");
-        environment.put("arch", System.getProperty("os.arch"));
-        environment.put("platform", System.getProperty("os.name"));
-        environment.put("cpus", Runtime.getRuntime().availableProcessors());
-
+        // Environment info (read dynamically from running JVM & OS host)
+        Map<String, Object> environment = getEnvironmentInfo();
         // Meta
         Map<String, Object> benchmarkMeta = new LinkedHashMap<>();
         benchmarkMeta.put("rounds", rounds);
@@ -373,9 +421,9 @@ public class BenchmarkService {
 
         Map<String, Object> results = new LinkedHashMap<>();
         results.put("jwtHs", jwtHsStats);
+        results.put("jwtEddsa", jwtEddsaStats);
         results.put("pasetoLoc", pasetoLocStats);
         results.put("pasetoPub", pasetoPubStats);
-
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("ok", true);
         response.put("benchmarkMeta", benchmarkMeta);
@@ -423,7 +471,7 @@ public class BenchmarkService {
 
         Map<String, Object> roundtrip = new LinkedHashMap<>();
         roundtrip.put("opsSec", roundtripOps);
-        roundtrip.put("avgLatencyUs", avgLatUs);
+        roundtrip.put("avgLatencyMs", avgLatUs);
         perf.put("roundtrip", roundtrip);
         stats.put("performance", perf);
 
@@ -442,6 +490,18 @@ public class BenchmarkService {
 
     private void verifyJwt(String token) {
         Jwts.parser().verifyWith(jwtSecretKey).build().parseSignedClaims(token);
+    }
+
+    private String buildJwtEddsa(Map<String, Object> payload) {
+        var builder = Jwts.builder().signWith(pasetoV4KeyPair.getPrivate(), Jwts.SIG.EdDSA);
+        for (var entry : payload.entrySet()) {
+            builder.claim(entry.getKey(), entry.getValue());
+        }
+        return builder.compact();
+    }
+
+    private void verifyJwtEddsa(String token) {
+        Jwts.parser().verifyWith(pasetoV4KeyPair.getPublic()).build().parseSignedClaims(token);
     }
 
     private String buildPasetoLocal(String jsonPayload) throws Exception {
@@ -476,9 +536,23 @@ public class BenchmarkService {
 
     @SuppressWarnings("unchecked")
     private double avgDouble(List<Map<String, Object>> rounds, String group, String key) {
-        return round1(rounds.stream()
+        return round3(rounds.stream()
                 .mapToDouble(r -> toDouble(((Map<?, ?>) r.get(group)).get(key)))
                 .average().orElse(0));
+    }
+    public Map<String, Object> getEnvironmentInfo() {
+        Map<String, Object> environment = new LinkedHashMap<>();
+        environment.put("javaVersion", System.getProperty("java.version"));
+        environment.put("javaVm", System.getProperty("java.vm.name"));
+        environment.put("javaVendor", System.getProperty("java.vendor"));
+        environment.put("springBootVersion", org.springframework.boot.SpringBootVersion.getVersion());
+        environment.put("arch", System.getProperty("os.arch"));
+        environment.put("platform", System.getProperty("os.name"));
+        environment.put("osVersion", System.getProperty("os.version"));
+        environment.put("cpus", Runtime.getRuntime().availableProcessors());
+        environment.put("cpuModel", detectCpuModel());
+        environment.put("maxMemoryMb", Runtime.getRuntime().maxMemory() / (1024 * 1024));
+        return environment;
     }
 
     private int getInt(Map<String, Object> map, String key, int defaultVal) {
@@ -508,5 +582,32 @@ public class BenchmarkService {
 
     private double round1(double v) {
         return Math.round(v * 10.0) / 10.0;
+    }
+
+    private String detectCpuModel() {
+        String os = System.getProperty("os.name", "").toLowerCase();
+        if (os.contains("mac")) {
+            try {
+                Process p = new ProcessBuilder("sysctl", "-n", "machdep.cpu.brand_string").start();
+                try (var reader = new java.io.BufferedReader(new java.io.InputStreamReader(p.getInputStream()))) {
+                    String line = reader.readLine();
+                    if (line != null && !line.isBlank()) {
+                        return line.trim();
+                    }
+                }
+            } catch (Exception ignored) {}
+        } else if (os.contains("linux")) {
+            try {
+                java.nio.file.Path cpuInfo = java.nio.file.Path.of("/proc/cpuinfo");
+                if (java.nio.file.Files.exists(cpuInfo)) {
+                    for (String line : java.nio.file.Files.readAllLines(cpuInfo)) {
+                        if (line.startsWith("model name")) {
+                            return line.substring(line.indexOf(':') + 1).trim();
+                        }
+                    }
+                }
+            } catch (Exception ignored) {}
+        }
+        return System.getProperty("os.arch", "Unknown");
     }
 }

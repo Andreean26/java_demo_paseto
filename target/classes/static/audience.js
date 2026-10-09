@@ -10,9 +10,9 @@ const resultText = document.querySelector('#resultText');
 const accessButton = document.querySelector('#accessButton');
 const copyButton = document.querySelector('#copyButton');
 const forgeButton = document.querySelector('#forgeButton');
-const tamperButton = document.querySelector('#tamperButton');
 const tokenHint = document.querySelector('#tokenHint');
 const decodeButton = document.querySelector('#decodeButton');
+const decryptButton = document.querySelector('#decryptButton');
 const decoderSummary = document.querySelector('#decoderSummary');
 const decoderDetails = document.querySelector('#decoderDetails');
 const decoderHeaderLabel = document.querySelector('#decoderHeaderLabel');
@@ -24,7 +24,25 @@ const decoderSignature = document.querySelector('#decoderSignature');
 const pasetoFormatContainer = document.querySelector('#pasetoFormatContainer');
 const formatCards = document.querySelectorAll('.format-card');
 const pasetoFormatInputs = document.querySelectorAll('input[name="pasetoFormat"]');
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
 
+function hideTamperHighlight() {}
+
+// Provide transparent .value getter/setter for contenteditable #tokenBox
+if (tokenBox) {
+  Object.defineProperty(tokenBox, 'value', {
+    get() {
+      return (this.innerText || this.textContent || '').replace(/\r?\n/g, '').trim();
+    },
+    set(val) {
+      this.innerText = val || '';
+    },
+    configurable: true
+  });
+}
 let currentName = '';
 let currentMode = null;
 let tokenRequestId = 0;
@@ -57,26 +75,47 @@ function updatePasetoFormatCards() {
 
 function setModeText(mode) {
   const secure = mode === 'paseto';
-  modeLabel.textContent = secure ? 'PASETO Secure' : 'JWT Vulnerable';
-  tamperButton.hidden = !secure;
-  forgeButton.hidden = secure;
-  if (pasetoFormatContainer) {
-    pasetoFormatContainer.hidden = !secure;
+  if (modeLabel) {
+    modeLabel.textContent = secure ? 'PASETO' : 'JWT';
+    modeLabel.style.color = secure ? 'var(--green)' : 'var(--yellow)';
   }
+  if (forgeButton) forgeButton.hidden = secure;
+  if (pasetoFormatContainer) pasetoFormatContainer.hidden = !secure;
 
+  const pageEyebrow = document.querySelector('#pageEyebrow');
+  const pageTitle = document.querySelector('#pageTitle');
+  const pageLead = document.querySelector('#pageLead');
+  const accessButton = document.querySelector('#accessButton');
+
+  if (secure) {
+    if (pageEyebrow) pageEyebrow.textContent = 'Eksplorasi Standar Modern';
+    if (pageTitle) pageTitle.textContent = "Let's Try PASETO!";
+    if (pageLead) pageLead.textContent = 'Bandingkan dua varian resmi PASETO v4: enkripsi simetris v4.local (Zero Data Leakage) dan tanda tangan digital asimetris v4.public (Ed25519).';
+    if (accessButton) accessButton.textContent = 'Verifikasi Token ke Server';
+  } else {
+    if (pageEyebrow) pageEyebrow.textContent = 'Simulasi Celah Keamanan';
+    if (pageTitle) pageTitle.textContent = 'Masuk ke brankas.';
+    if (pageLead) pageLead.textContent = 'Uji coba kerentanan JWT: ambil token awal role USER, lalu coba manipulasi payload menjadi ADMIN untuk membobol brankas.';
+    if (accessButton) accessButton.textContent = 'Akses brankas rahasia';
+  }
   const startTourBtn = document.querySelector('#startTourBtn');
   if (startTourBtn) {
     startTourBtn.innerHTML = secure ? '💡 Panduan Demo (PASETO)' : '💡 Panduan Demo (JWT)';
+  }
+
+  if (decryptButton) {
+    const format = getSelectedPasetoFormat();
+    decryptButton.hidden = !(secure && format === 'v4.local');
   }
 
   if (secure) {
     const format = getSelectedPasetoFormat();
     if (format === 'v4.local') {
       tokenHint.textContent =
-        'Token PASETO v4.local (AEAD ChaCha20-Poly1305) terenkripsi penuh. Coba tekan "Rusak 1 karakter", lalu akses brankas.';
+        'Token PASETO v4.local (XChaCha20 + BLAKE2b-MAC) terenkripsi penuh. Coba tekan "Decode" (terkunci) lalu bandingkan dengan tombol "Decrypt (Kunci Server)".';
     } else {
       tokenHint.textContent =
-        'Token PASETO v4.public (Ed25519). Payload terbaca publik namun dilindungi digital signature. Coba tekan "Rusak 1 karakter", lalu akses brankas.';
+        'Token PASETO v4.public (Ed25519). Payload terlindungi digital signature. Coba ubah atau hapus karakter di kotak token, lalu akses brankas.';
     }
   } else {
     tokenHint.textContent =
@@ -200,11 +239,11 @@ function inspectSecureToken(token) {
   const packed = decodeBase64UrlBytes(body);
 
   if (purpose === 'local') {
-    // v4 uses ChaCha20 + BLAKE2b-MAC (or XChaCha20-Poly1305 in v2)
+    // v4 uses XChaCha20 + BLAKE2b-MAC (Encrypt-then-MAC)
     const cipherName =
       version === 'v4'
-        ? 'ChaCha20-Poly1305'
-        : (version === 'v2' ? 'XChaCha20-Poly1305 + BLAKE2b' : 'AES-256-CTR + HMAC-SHA384');
+        ? 'XChaCha20 + BLAKE2b-MAC (EtM)'
+        : (version === 'v2' ? 'XChaCha20-Poly1305' : 'AES-256-CTR + HMAC-SHA384');
     showDecoderDetails({
       headerLabel: 'Header PASETO',
       header: `${version}.${purpose}`,
@@ -228,20 +267,10 @@ function inspectSecureToken(token) {
       'secure'
     );
   } else {
-    // PUBLIC PURPOSE (Asymmetric Signature)
-    // Signature length:
-    // v4 / v2: 64 bytes (Ed25519)
-    // v3: 96 bytes (ECDSA P-384 IEEE P1363)
-    // v1: 256 bytes (RSA 2048)
-    let sigLen = 64;
-    let cryptoAlg = 'Ed25519 (EdDSA)';
-    if (version === 'v3') {
-      sigLen = 96;
-      cryptoAlg = 'ECDSA (P-384 / SHA-384)';
-    } else if (version === 'v1') {
-      sigLen = 256;
-      cryptoAlg = 'RSA-PSS / SHA-384';
-    }
+    // PUBLIC PURPOSE (Asymmetric Signature Ed25519)
+    // PASETO v4.public signature length: 64 bytes (Ed25519 / EdDSA)
+    const sigLen = 64;
+    const cryptoAlg = 'Ed25519 (EdDSA)';
 
     if (packed.length <= sigLen) {
       throw new Error(`Token PASETO public terlalu pendek (${packed.length} bytes, minimum ${sigLen + 1} bytes).`);
@@ -302,6 +331,55 @@ function decodeToken() {
   }
 }
 
+async function decryptTokenServer() {
+  const token = tokenBox.value.trim();
+  if (!token) {
+    decoderDetails.hidden = true;
+    setDecoderSummary('Token masih kosong. Ambil token terlebih dahulu.', 'error');
+    return;
+  }
+
+  if (decryptButton) decryptButton.disabled = true;
+  setDecoderSummary('Mengirim token ke Backend untuk didekripsi menggunakan Kunci Rahasia 256-bit...', null);
+
+  try {
+    const response = await fetch('/api/auth/decrypt', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ token })
+    });
+    const payload = await response.json();
+
+    if (!response.ok || !payload.ok) {
+      decoderDetails.hidden = true;
+      setDecoderSummary(
+        `[DEKRIPSI GAGAL]: ${payload.error || 'Token rusak atau Authentication Tag BLAKE2b tidak cocok!'}`,
+        'error'
+      );
+      return;
+    }
+
+    decoderActive = true;
+    showDecoderDetails({
+      headerLabel: 'Header PASETO (Status: Terdekripsi Resmi)',
+      header: 'v4.local (Decrypted via Backend 256-bit Secret Key)',
+      payloadLabel: 'Payload Asli Terbuka (Decrypted Claims JSON)',
+      payload: JSON.stringify(payload.claims, null, 2),
+      signatureLabel: 'Autentikasi AEAD BLAKE2b',
+      signature: 'Authentication Tag 32-byte VALID! Integritas dan keaslian token 100% terverifikasi oleh server.'
+    });
+
+    setDecoderSummary(
+      '🔓 BERHASIL DIDEKRIPSI! Token v4.local sukses dibuka menggunakan Kunci Rahasia 256-bit server. Terbukti data utuh dan tidak termanipulasi.',
+      'secure'
+    );
+  } catch (err) {
+    decoderDetails.hidden = true;
+    setDecoderSummary(`Koneksi server gagal: ${err.message}`, 'error');
+  } finally {
+    if (decryptButton) decryptButton.disabled = false;
+  }
+}
 function refreshDecoder() {
   if (decoderActive) {
     decodeToken();
@@ -333,6 +411,7 @@ async function requestToken(name) {
     return null;
   }
 
+  hideTamperHighlight();
   currentMode = payload.mode;
   tokenBox.value = payload.token;
   roleLabel.textContent = payload.role;
@@ -343,37 +422,29 @@ async function requestToken(name) {
 
 async function syncPresenterMode(mode) {
   const nextMode = mode === 'paseto' ? 'paseto' : 'jwt';
-  if (nextMode === currentMode) {
-    setModeText(nextMode);
-    return;
-  }
-
   currentMode = nextMode;
   setModeText(currentMode);
   roleLabel.textContent = 'USER';
   checkAndAutoStartTour();
 
-  const name = currentName || nameInput.value.trim();
-  if (!name) {
-    tokenRequestId += 1;
-    tokenBox.value = '';
-    refreshDecoder();
+  // Reset token dan decoder secara manual untuk peragaan panggung
+  tokenRequestId += 1;
+  tokenBox.value = '';
+  refreshDecoder();
+
+  const targetName = currentName || nameInput.value.trim();
+  if (targetName) {
+    currentName = targetName;
     setResult(
-      `Presenter mengganti mode ke ${modeLabel.textContent}. Isi nama untuk mengambil token mode aktif.`,
+      `Presenter beralih ke mode ${modeLabel.textContent}. Klik "Ambil token mode aktif" untuk membuat token baru.`,
       null
     );
-    return;
+  } else {
+    setResult(
+      `Presenter beralih ke mode ${modeLabel.textContent}. Isi nama lalu klik "Ambil token mode aktif".`,
+      null
+    );
   }
-
-  currentName = name;
-  const payload = await requestToken(currentName);
-  if (!payload) {
-    return;
-  }
-  setResult(
-    `Presenter mengganti mode ke ${modeLabel.textContent}. Token USER diperbarui otomatis.`,
-    null
-  );
 }
 
 async function generateToken(event) {
@@ -420,6 +491,7 @@ async function copyToken() {
 
 // ===== JWT: simulasi pemalsuan role ADMIN dengan alg:none =====
 function forgeJwt() {
+  hideTamperHighlight();
   const name = currentName || nameInput.value.trim() || 'Audience';
   const header = { alg: 'none', typ: 'JWT' };
   const payload = {
@@ -435,18 +507,25 @@ function forgeJwt() {
 
 // ===== PASETO-style: simulasi perubahan token untuk menguji autentikasi AEAD & Digital Signature =====
 function tamperToken() {
-  const token = tokenBox.value.trim();
+  const token = tokenBox.value;
   if (!token) {
     setResult('Token masih kosong.', 'error');
     return;
   }
-  // Rusak karakter non-padding (misal 5 karakter sebelum akhir)
-  const index = Math.max(0, token.length - 5);
+  // Rusak karakter non-padding (12 karakter dari akhir agar tepat di dalam tag/ciphertext)
+  const index = Math.max(0, token.length - 12);
   const char = token[index];
-  const replacement = char === 'A' ? 'B' : char === 'a' ? 'b' : 'A';
-  tokenBox.value = `${token.slice(0, index)}${replacement}${token.slice(index + 1)}`;
+  const replacement = char === 'A' ? 'B' : char === 'a' ? 'b' : char === 'Z' ? 'X' : 'A';
+
+  const prefix = escapeHtml(token.slice(0, index));
+  const badge = `<span class="tamper-badge" title="Karakter ini dirusak: '${char}' ➔ '${replacement}'">${escapeHtml(replacement)}</span>`;
+  const suffix = escapeHtml(token.slice(index + 1));
+
+  // Render badge merah menyala tepat di dalam teks token (tanpa box baru)
+  tokenBox.innerHTML = `${prefix}${badge}${suffix}`;
+
   refreshDecoder();
-  setResult('Satu karakter token diubah. Pada PASETO secure, akses harus ditolak.', null);
+  setResult(`[TAMPERED] Karakter ke-${index + 1} ('${char}' ➔ '${replacement}') berhasil dirusak! Tekan "Akses brankas rahasia" untuk menguji penolakan.`, 'error');
 }
 
 function connectEvents() {
@@ -463,24 +542,24 @@ function connectEvents() {
   stream.addEventListener('mode', synchronize);
 }
 
-nameForm.addEventListener('submit', generateToken);
-accessButton.addEventListener('click', accessVault);
-copyButton.addEventListener('click', copyToken);
-forgeButton.addEventListener('click', forgeJwt);
-tamperButton.addEventListener('click', tamperToken);
-decodeButton.addEventListener('click', decodeToken);
-tokenBox.addEventListener('input', refreshDecoder);
+if (nameForm) nameForm.addEventListener('submit', generateToken);
+if (accessButton) accessButton.addEventListener('click', accessVault);
+if (copyButton) copyButton.addEventListener('click', copyToken);
+if (forgeButton) forgeButton.addEventListener('click', forgeJwt);
+if (decodeButton) decodeButton.addEventListener('click', decodeToken);
+if (decryptButton) decryptButton.addEventListener('click', decryptTokenServer);
+if (tokenBox) tokenBox.addEventListener('input', refreshDecoder);
 
 pasetoFormatInputs.forEach((input) => {
   input.addEventListener('change', () => {
     updatePasetoFormatCards();
     setModeText(currentMode);
-    if (currentMode === 'paseto') {
-      const name = currentName || nameInput.value.trim();
-      if (name) {
-        requestToken(name);
-      }
-    }
+    tokenBox.value = '';
+    refreshDecoder();
+    setResult(
+      `Format diubah ke ${getSelectedPasetoFormat()}. Klik "Ambil token mode aktif" untuk membuat token format ini.`,
+      null
+    );
   });
 });
 
@@ -539,7 +618,7 @@ const pasetoTourSteps = [
   {
     element: '#pasetoFormatContainer',
     title: '1. Pilihan Format PASETO',
-    description: 'Pilih format token: <strong>v4.local</strong> (Symmetric AEAD dengan enkripsi ChaCha20-Poly1305) atau <strong>v4.public</strong> (Asymmetric Ed25519 digital signature).'
+    description: 'Pilih format token: <strong>v4.local</strong> (Symmetric AEAD dengan enkripsi XChaCha20 + BLAKE2b-MAC) atau <strong>v4.public</strong> (Asymmetric Ed25519 digital signature).'
   },
   {
     element: '#nameForm',
@@ -562,19 +641,19 @@ const pasetoTourSteps = [
     description: 'Klik <strong>Decode token</strong>. Pada mode <code>v4.local</code>, seluruh payload terenkripsi secara kriptografis. Pihak luar tidak dapat mengintip nama atau role kamu!'
   },
   {
-    element: '#tamperButton',
-    title: '6. Uji Ketahanan: Rusak 1 Karakter',
-    description: 'Klik tombol <strong>Rusak 1 karakter</strong>. Ini mensimulasikan penyerang yang mencoba memodifikasi 1 byte ciphertext token untuk mengubah hak akses.'
+    element: '#tokenBox',
+    title: '6. Uji Ketahanan Tampering',
+    description: 'Coba ubah atau hapus karakter apa pun di dalam kotak token ini untuk menguji bagaimana server mendeteksi dan menolak token yang dimanipulasi.'
   },
   {
     element: '#accessButton',
-    title: '7. Coba Buka Brankas dengan Token Modifikasi',
-    description: 'Klik <strong>Akses brankas rahasia</strong>. Server PASETO akan memeriksa Authentication Tag sebelum membaca payload.'
+    title: '7. Verifikasi Token ke Server',
+    description: 'Klik <strong>Verifikasi Token ke Server</strong>. Server PASETO akan memeriksa Authentication Tag (v4.local) atau Digital Signature Ed25519 (v4.public).'
   },
   {
     element: '#resultPanel',
-    title: '8. Serangan Digagalkan (BLOCKED)!',
-    description: 'Respon server adalah <strong>BLOCKED (401)</strong>. Autentikasi AEAD menggagalkan dekripsi seketika. Brankas tetap aman dan tidak dapat dibobol!'
+    title: '8. Status Integritas (VERIFIED / BLOCKED)',
+    description: 'Jika token autentik, server merespon <strong>VERIFIED</strong>. Jika token sengaja dirusak atau dimanipulasi, server merespon <strong>BLOCKED (401)</strong>!'
   }
 ];
 

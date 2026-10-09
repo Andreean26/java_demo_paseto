@@ -13,7 +13,7 @@
         <span>Live Demo PASETO</span>
       </div>
       <div style="display: flex; align-items: center; gap: 12px;">
-        <button class="tour-btn" id="startTourBtn" type="button">💡 Panduan Demo</button>
+        <button class="tour-btn" id="startTourBtn" type="button">Panduan Demo</button>
         <nav class="nav-links" aria-label="Halaman demo">
           <a href="/audience.html" class="active">Audience</a>
         </nav>
@@ -22,10 +22,9 @@
 
     <main class="page audience-layout">
       <section class="panel form-panel">
-        <p class="eyebrow">Live Demo</p>
-        <h1>Masuk ke brankas.</h1>
-        <p class="lead">Presenter menentukan mode JWT atau PASETO. Halaman ini akan mengikuti perpindahan mode secara otomatis tanpa perlu di-refresh.</p>
-
+        <p class="eyebrow" id="pageEyebrow">Live Demo</p>
+        <h1 id="pageTitle">Masuk ke brankas.</h1>
+        <p class="lead" id="pageLead">Presenter menentukan mode JWT atau PASETO. Halaman ini akan mengikuti perpindahan mode secara otomatis tanpa perlu di-refresh.</p>
         <form id="nameForm">
           <label for="nameInput">Nama peserta</label>
           <input id="nameInput" name="name" autocomplete="name" placeholder="Tulis nama kamu" required>
@@ -39,7 +38,7 @@
                   <span class="format-badge local">LOCAL</span>
                   <strong>v4.local</strong>
                 </div>
-                <p class="format-desc">Simetris AEAD (ChaCha20-Poly1305) &bull; Payload terenkripsi penuh (Zero Data Leakage)</p>
+                <p class="format-desc">Simetris AEAD (XChaCha20 + BLAKE2b-MAC) &bull; Payload terenkripsi penuh (Zero Data Leakage)</p>
               </label>
 
               <label class="format-card" data-format="v4.public">
@@ -74,11 +73,10 @@
         <div class="panel token-panel">
           <h2>Token</h2>
           <p class="muted" id="tokenHint">Mode aktif sedang disinkronkan dari presenter.</p>
-          <textarea id="tokenBox" spellcheck="false" placeholder="Token akan muncul di sini setelah nama dikirim."></textarea>
+          <div id="tokenBox" class="token-box" contenteditable="true" spellcheck="false" role="textbox" aria-multiline="true" data-placeholder="Token akan muncul di sini setelah nama dikirim."></div>
           <div class="button-row" style="margin-top: 14px;">
             <button class="primary-button" id="accessButton" type="button">Akses brankas rahasia</button>
             <button class="quiet-button" id="copyButton" type="button">Salin token</button>
-            <button class="quiet-button" id="tamperButton" type="button" hidden>Rusak 1 karakter</button>
             <button class="danger-button" id="forgeButton" type="button">Forge alg:none (ADMIN)</button>
           </div>
         </div>
@@ -89,7 +87,10 @@
               <p class="eyebrow">Inspect token</p>
               <h2>Decoder Token</h2>
             </div>
-            <button class="quiet-button" id="decodeButton" type="button">Decode token</button>
+            <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+              <button class="quiet-button" id="decodeButton" type="button">Decode token</button>
+              <button class="primary-button" id="decryptButton" type="button" hidden style="background: var(--green); color: var(--ink);">Decrypt</button>
+            </div>
           </div>
           <p class="muted">Decode hanya membaca struktur dan isi yang terlihat. Hasil ini tidak membuktikan bahwa signature token valid.</p>
           <p class="decoder-summary" id="decoderSummary" aria-live="polite">Ambil token, lalu klik Decode token untuk melihat isinya.</p>
@@ -116,7 +117,7 @@
         </div>
       </section>
     </main>
-    <script src="/coachmark.js"></script>
-    <script src="/audience.js"></script>
+    <script src="/coachmark.js?v=2.0"></script>
+    <script src="/audience.js?v=2.0"></script>
   </body>
 </html>

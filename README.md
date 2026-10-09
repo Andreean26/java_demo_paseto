@@ -12,7 +12,7 @@ Aplikasi ini menggunakan pustaka resmi standar industri:
 
 - 📱 **Portal Audience (`/audience.html`)**: Halaman interaktif bagi peserta seminar/workshop untuk mengklaim token, menginspeksi claims, memalsukan token role ADMIN (`alg:none`), merusak token PASETO, dan mencoba membobol brankas rahasia.
 - 📽️ **Panggung Presenter (`/presenter.html`)**: Kontrol proyektor bagi pembicara untuk mengubah mode keamanan secara live, memantau *live audit stream* via **Server-Sent Events (SSE)**, dan menampilkan alarm visual merah saat sistem berhasil diretas (*HACKED*).
-- ⚡ **Parametric Benchmark Engine (`/benchmark.html`)**: Mesin pengujian kriptografi multi-putaran (10x-30x sampling) berbasis hardware timer (`System.nanoTime()`) untuk membandingkan throughput kecepatan rata-rata (ops/detik), mikro-latensi ($p50, p95, p99$), dan ukuran byte overhead.
+- ⚡ **Parametric Benchmark Engine (`/benchmark.html`)**: Mesin pengujian kriptografi multi-putaran (10x-30x sampling) berbasis hardware timer (`System.nanoTime()`) dengan perbandingan adil 4 varian: **JWT HS256** (Symmetric MAC), **JWT EdDSA** (Asymmetric Ed25519 ⚖️), **PASETO v4.local** (Symmetric AEAD), dan **PASETO v4.public** (Asymmetric Ed25519 ⚖️).
 - 💡 **Interactive Coach Mark**: Panduan *walkthrough* onboarding spotlight interaktif yang **terpisah secara dinamis** sesuai mode aktif (`💡 Panduan Demo (JWT)` dan `💡 Panduan Demo (PASETO)`).
 - 🖥️ **Projector-Ready High Visibility**: Tata letak *fluid widescreen* (hingga 1740px) dengan tipografi berukuran besar dan kontras tinggi, sehingga seluruh teks, claims, dan scoreboard terbaca jelas dari jarak jauh di ruangan presentasi.
 
@@ -20,11 +20,11 @@ Aplikasi ini menggunakan pustaka resmi standar industri:
 
 ## 🏗️ Mengapa PASETO vs JWT?
 
-| Parameter | JSON Web Token (JWT) | PASETO (v4 / v3) |
+| Parameter | JSON Web Token (JWT) | PASETO (v4) |
 | :--- | :--- | :--- |
-| **Kerahasiaan Payload** | ⚠️ **Plaintext** (Hanya di-encode Base64Url, semua orang bisa mengintip isi token). | ✅ **Terenkripsi Total** pada mode `local` menggunakan AEAD ChaCha20-Poly1305. |
+| **Kerahasiaan Payload** | ⚠️ **Plaintext** (Hanya di-encode Base64Url, semua orang bisa mengintip isi token). | ✅ **Terenkripsi Total** pada mode `local` menggunakan AEAD XChaCha20 + BLAKE2b-MAC. |
 | **Algorithm Agility** | ❌ **Rentan Desain** (Header token menentukan algoritma verifikasi, memicu celah `alg:none` & *key confusion*). | ✅ **Kebal** (Algoritma terkunci permanen pada versi protokol, tidak ada header dinamis). |
-| **Pilihan Kriptografi** | ⚠️ Terlalu fleksibel, mendukung puluhan kombinasi cipher termasuk yang usang. | ✅ Modern & terstandarisasi (ChaCha20-Poly1305, Ed25519, BLAKE2b, AES-256-CTR). |
+| **Pilihan Kriptografi** | ⚠️ Terlalu fleksibel, mendukung puluhan kombinasi cipher termasuk yang usang. | ✅ Modern & terstandarisasi (XChaCha20, Ed25519, BLAKE2b-MAC, AES-256-CTR). |
 | **Ketahanan Tampering** | ⚠️ Bergantung pada algoritma dan kehati-hatian urutan parsing di backend. | ✅ **AEAD Terautentikasi** (Perubahan 1 bit membuat seluruh proses dekripsi gagal seketika). |
 | **Key Management** | ❌ Rentan secret lemah pendek (`"secret123"` rawan brute-force). | ✅ Enforced Key Size (wajib tepat 256-bit atau 384-bit). |
 
@@ -125,7 +125,7 @@ java_demo_paseto/
         │   └── service/
         │       ├── DemoStateService.java     # Ring buffer max 40 event & thread-safe mode
         │       ├── JwtService.java           # HS256 signing & intentional alg:none bypass
-        │       ├── PasetoService.java        # paseto4j v4.local, v4.public, v3.local, v3.public
+        │       ├── PasetoService.java        # paseto4j v4.local & v4.public (spec v4 murni)
         │       ├── BenchmarkService.java     # Hardware timer nano benchmark engine
         │       └── SseService.java           # Multi-client SseEmitter dispatcher
         └── resources/

@@ -13,9 +13,9 @@ const envArch = document.querySelector('#envArch');
 
 // KPI elements
 const kpiJwtRoundtrip = document.querySelector('#kpiJwtRoundtrip');
+const kpiJwtEddsaRoundtrip = document.querySelector('#kpiJwtEddsaRoundtrip');
 const kpiPasetoLocRoundtrip = document.querySelector('#kpiPasetoLocRoundtrip');
 const kpiPasetoPubRoundtrip = document.querySelector('#kpiPasetoPubRoundtrip');
-
 // Chart containers
 const chartGenerateTime = document.querySelector('#chartGenerateTime');
 const chartVerifyTime = document.querySelector('#chartVerifyTime');
@@ -86,12 +86,12 @@ function renderTrendBars(container, roundsHistory) {
   for (const r of roundsHistory) {
     maxOps = Math.max(
       maxOps,
-      r.jwtHs.roundtripOpsSec || 0,
-      r.pasetoLoc.roundtripOpsSec || 0,
-      r.pasetoPub.roundtripOpsSec || 0
+      r.jwtHs?.roundtripOpsSec || 0,
+      r.jwtEddsa?.roundtripOpsSec || 0,
+      r.pasetoLoc?.roundtripOpsSec || 0,
+      r.pasetoPub?.roundtripOpsSec || 0
     );
   }
-
   for (const roundData of roundsHistory) {
     const col = document.createElement('div');
     col.className = 'trend-col';
@@ -105,15 +105,21 @@ function renderTrendBars(container, roundsHistory) {
     const jwtBar = document.createElement('div');
     jwtBar.className = 'trend-bar jwt';
     jwtBar.style.height = `${jwtHeight}%`;
-    jwtBar.title = `Putaran ${roundData.round} - JWT: ${formatNumber(jwtOps)} ops/s (${roundData.jwtHs.avgLatencyUs} \u03BCs)`;
+    jwtBar.title = `Putaran ${roundData.round} - JWT HS256: ${formatNumber(jwtOps)} ops/s (${roundData.jwtHs.avgLatencyMs || roundData.jwtHs.avgLatencyUs} ms)`;
 
-    // 2. PASETO v4.local Bar
+    // 2. JWT EdDSA Bar (Ed25519)
+    const eddsaOps = roundData.jwtEddsa?.roundtripOpsSec || 0;
+    const eddsaHeight = Math.max(4, Math.round((eddsaOps / maxOps) * 100));
+    const eddsaBar = document.createElement('div');
+    eddsaBar.className = 'trend-bar jwt-eddsa';
+    eddsaBar.style.height = `${eddsaHeight}%`;
+    eddsaBar.title = `Putaran ${roundData.round} - JWT EdDSA: ${formatNumber(eddsaOps)} ops/s (${roundData.jwtEddsa?.avgLatencyMs || roundData.jwtEddsa?.avgLatencyUs || 0} ms)`;
     const locOps = roundData.pasetoLoc.roundtripOpsSec || 0;
     const locHeight = Math.max(4, Math.round((locOps / maxOps) * 100));
     const locBar = document.createElement('div');
     locBar.className = 'trend-bar paseto-loc';
     locBar.style.height = `${locHeight}%`;
-    locBar.title = `Putaran ${roundData.round} - PASETO Local: ${formatNumber(locOps)} ops/s (${roundData.pasetoLoc.avgLatencyUs} \u03BCs)`;
+    locBar.title = `Putaran ${roundData.round} - PASETO Local: ${formatNumber(locOps)} ops/s (${roundData.pasetoLoc.avgLatencyMs || roundData.pasetoLoc.avgLatencyUs} ms)`;
 
     // 3. PASETO v4.public Bar
     const pubOps = roundData.pasetoPub.roundtripOpsSec || 0;
@@ -121,10 +127,9 @@ function renderTrendBars(container, roundsHistory) {
     const pubBar = document.createElement('div');
     pubBar.className = 'trend-bar paseto-pub';
     pubBar.style.height = `${pubHeight}%`;
-    pubBar.title = `Putaran ${roundData.round} - PASETO Public: ${formatNumber(pubOps)} ops/s (${roundData.pasetoPub.avgLatencyUs} \u03BCs)`;
+    pubBar.title = `Putaran ${roundData.round} - PASETO Public: ${formatNumber(pubOps)} ops/s (${roundData.pasetoPub.avgLatencyMs || roundData.pasetoPub.avgLatencyUs} ms)`;
 
-    barsGroup.append(jwtBar, locBar, pubBar);
-
+    barsGroup.append(jwtBar, eddsaBar, locBar, pubBar);
     const label = document.createElement('span');
     label.className = 'trend-col-label';
     label.textContent = `R${roundData.round}`;
@@ -135,89 +140,115 @@ function renderTrendBars(container, roundsHistory) {
 }
 
 function updateKpiCards(results) {
-  const { jwtHs, pasetoLoc, pasetoPub } = results;
+  const { jwtHs, jwtEddsa, pasetoLoc, pasetoPub } = results;
 
   if (kpiJwtRoundtrip && jwtHs) {
     kpiJwtRoundtrip.textContent = `${formatNumber(jwtHs.performance.roundtrip.opsSec)} ops/s`;
+    const sub = document.querySelector('#kpiJwtSub');
+    if (sub) sub.textContent = `Symmetric MAC \u2022 Latensi: ${jwtHs.performance.roundtrip.avgLatencyMs || jwtHs.performance.roundtrip.avgLatencyUs} ms`;
+  }
+  if (kpiJwtEddsaRoundtrip && jwtEddsa) {
+    kpiJwtEddsaRoundtrip.textContent = `${formatNumber(jwtEddsa.performance.roundtrip.opsSec)} ops/s`;
+    const sub = document.querySelector('#kpiJwtEddsaSub');
+    if (sub) sub.textContent = `Asymmetric Ed25519 \u2022 Latensi: ${jwtEddsa.performance.roundtrip.avgLatencyMs || jwtEddsa.performance.roundtrip.avgLatencyUs} ms`;
   }
   if (kpiPasetoLocRoundtrip && pasetoLoc) {
     kpiPasetoLocRoundtrip.textContent = `${formatNumber(pasetoLoc.performance.roundtrip.opsSec)} ops/s`;
+    const sub = document.querySelector('#kpiPasetoLocSub');
+    if (sub) sub.textContent = `Symmetric AEAD \u2022 Latensi: ${pasetoLoc.performance.roundtrip.avgLatencyMs || pasetoLoc.performance.roundtrip.avgLatencyUs} ms`;
   }
   if (kpiPasetoPubRoundtrip && pasetoPub) {
     kpiPasetoPubRoundtrip.textContent = `${formatNumber(pasetoPub.performance.roundtrip.opsSec)} ops/s`;
+    const sub = document.querySelector('#kpiPasetoPubSub');
+    if (sub) sub.textContent = `Asymmetric Ed25519 \u2022 Latensi: ${pasetoPub.performance.roundtrip.avgLatencyMs || pasetoPub.performance.roundtrip.avgLatencyUs} ms`;
   }
 }
 
 function updateCharts(data) {
   const { results, roundsHistory, benchmarkMeta } = data;
-  const { jwtHs, pasetoLoc, pasetoPub } = results;
+  const { jwtHs, jwtEddsa, pasetoLoc, pasetoPub } = results;
 
   // 1A. Grafik Waktu Pembuatan (Generate Time — Signing / Enkripsi)
-  const jwtSignUs = (jwtHs.performance.sign.stats?.mean || 0).toFixed(1);
-  const locEncUs = (pasetoLoc.performance.encrypt.stats?.mean || 0).toFixed(1);
-  const pubSignUs = (pasetoPub.performance.sign.stats?.mean || 0).toFixed(1);
+  const jwtSignMs = (jwtHs.performance.sign.stats?.mean || 0).toFixed(3);
+  const jwtEddsaSignMs = (jwtEddsa?.performance.sign.stats?.mean || 0).toFixed(3);
+  const locEncMs = (pasetoLoc.performance.encrypt.stats?.mean || 0).toFixed(3);
+  const pubSignMs = (pasetoPub.performance.sign.stats?.mean || 0).toFixed(3);
 
   renderBarChart(
     chartGenerateTime,
     [
       {
         label: 'JWT (HS256) — Signing HMAC',
-        value: Number(jwtSignUs),
+        value: Number(jwtSignMs),
         barVal: jwtHs.performance.sign.opsSec,
-        displayValue: `${jwtSignUs} \u03BCs (${formatNumber(jwtHs.performance.sign.opsSec)} ops/s)`,
+        displayValue: `${jwtSignMs} ms (${formatNumber(jwtHs.performance.sign.opsSec)} ops/s)`,
         colorClass: 'cyan'
       },
       {
-        label: 'PASETO (v4.local) — Enkripsi AEAD ChaCha20',
-        value: Number(locEncUs),
+        label: 'JWT (EdDSA / Ed25519) — Asymmetric Sign',
+        value: Number(jwtEddsaSignMs),
+        barVal: jwtEddsa?.performance.sign.opsSec || 0,
+        displayValue: `${jwtEddsaSignMs} ms (${formatNumber(jwtEddsa?.performance.sign.opsSec || 0)} ops/s)`,
+        colorClass: 'indigo'
+      },
+      {
+        label: 'PASETO (v4.local) — Enkripsi XChaCha20 + BLAKE2b',
+        value: Number(locEncMs),
         barVal: pasetoLoc.performance.encrypt.opsSec,
-        displayValue: `${locEncUs} \u03BCs (${formatNumber(pasetoLoc.performance.encrypt.opsSec)} ops/s)`,
+        displayValue: `${locEncMs} ms (${formatNumber(pasetoLoc.performance.encrypt.opsSec)} ops/s)`,
         colorClass: 'green'
       },
       {
         label: 'PASETO (v4.public) — Digital Signature Ed25519',
-        value: Number(pubSignUs),
+        value: Number(pubSignMs),
         barVal: pasetoPub.performance.sign.opsSec,
-        displayValue: `${pubSignUs} \u03BCs (${formatNumber(pasetoPub.performance.sign.opsSec)} ops/s)`,
+        displayValue: `${pubSignMs} ms (${formatNumber(pasetoPub.performance.sign.opsSec)} ops/s)`,
         colorClass: 'yellow'
       }
     ],
-    { unit: '\u03BCs' }
+    { unit: 'ms' }
   );
 
   // 1B. Grafik Waktu Verifikasi (Verify Time — Validasi / Dekripsi)
-  const jwtVerifyUs = (jwtHs.performance.verify.stats?.mean || 0).toFixed(1);
-  const locDecUs = (pasetoLoc.performance.decrypt.stats?.mean || 0).toFixed(1);
-  const pubVerifyUs = (pasetoPub.performance.verify.stats?.mean || 0).toFixed(1);
+  const jwtVerifyMs = (jwtHs.performance.verify.stats?.mean || 0).toFixed(3);
+  const jwtEddsaVerifyMs = (jwtEddsa?.performance.verify.stats?.mean || 0).toFixed(3);
+  const locDecMs = (pasetoLoc.performance.decrypt.stats?.mean || 0).toFixed(3);
+  const pubVerifyMs = (pasetoPub.performance.verify.stats?.mean || 0).toFixed(3);
 
   renderBarChart(
     chartVerifyTime,
     [
       {
-        label: 'JWT (HS256) — Validasi Signature',
-        value: Number(jwtVerifyUs),
+        label: 'JWT (HS256) — Validasi Signature HMAC',
+        value: Number(jwtVerifyMs),
         barVal: jwtHs.performance.verify.opsSec,
-        displayValue: `${jwtVerifyUs} \u03BCs (${formatNumber(jwtHs.performance.verify.opsSec)} ops/s)`,
+        displayValue: `${jwtVerifyMs} ms (${formatNumber(jwtHs.performance.verify.opsSec)} ops/s)`,
         colorClass: 'cyan'
       },
       {
+        label: 'JWT (EdDSA / Ed25519) — Verifikasi Public Key',
+        value: Number(jwtEddsaVerifyMs),
+        barVal: jwtEddsa?.performance.verify.opsSec || 0,
+        displayValue: `${jwtEddsaVerifyMs} ms (${formatNumber(jwtEddsa?.performance.verify.opsSec || 0)} ops/s)`,
+        colorClass: 'indigo'
+      },
+      {
         label: 'PASETO (v4.local) — Dekripsi & Tag BLAKE2b',
-        value: Number(locDecUs),
+        value: Number(locDecMs),
         barVal: pasetoLoc.performance.decrypt.opsSec,
-        displayValue: `${locDecUs} \u03BCs (${formatNumber(pasetoLoc.performance.decrypt.opsSec)} ops/s)`,
+        displayValue: `${locDecMs} ms (${formatNumber(pasetoLoc.performance.decrypt.opsSec)} ops/s)`,
         colorClass: 'green'
       },
       {
-        label: 'PASETO (v4.public) — Verifikasi Kunci Publik',
-        value: Number(pubVerifyUs),
+        label: 'PASETO (v4.public) — Verifikasi Kunci Publik Ed25519',
+        value: Number(pubVerifyMs),
         barVal: pasetoPub.performance.verify.opsSec,
-        displayValue: `${pubVerifyUs} \u03BCs (${formatNumber(pasetoPub.performance.verify.opsSec)} ops/s)`,
+        displayValue: `${pubVerifyMs} ms (${formatNumber(pasetoPub.performance.verify.opsSec)} ops/s)`,
         colorClass: 'yellow'
       }
     ],
-    { unit: '\u03BCs' }
+    { unit: 'ms' }
   );
-
   // 2. Grafik Konsistensi 10 Putaran (Trend Bar Columns)
   if (trendTitle && benchmarkMeta) {
     trendTitle.textContent = `2. Grafik Konsistensi ${benchmarkMeta.rounds} Putaran Pengujian`;
@@ -242,6 +273,11 @@ function updateCharts(data) {
         colorClass: 'cyan'
       },
       {
+        label: `JWT (EdDSA / Ed25519) — Overhead +${jwtEddsa?.overheadBytes || 0} B (+${jwtEddsa?.overheadPercentage || 0}%)`,
+        value: jwtEddsa?.byteSize || 0,
+        colorClass: 'indigo'
+      },
+      {
         label: `PASETO (v4.local) — Overhead +${pasetoLoc.overheadBytes} B (+${pasetoLoc.overheadPercentage}%)`,
         value: pasetoLoc.byteSize,
         colorClass: 'green'
@@ -254,6 +290,33 @@ function updateCharts(data) {
     ],
     { unit: 'Bytes' }
   );
+
+  // Sinkronisasi angka tabel Matriks Evaluasi Menyeluruh dengan hasil test riil
+  const setEl = (id, txt) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = txt;
+  };
+
+  if (jwtHs) {
+    setEl('matrixJwtHsOps', `${formatNumber(jwtHs.performance.roundtrip.opsSec)} ops/s`);
+    setEl('matrixJwtHsLat', `${jwtHs.performance.roundtrip.avgLatencyMs} ms`);
+    setEl('matrixJwtHsSize', `${jwtHs.byteSize} Bytes`);
+  }
+  if (jwtEddsa) {
+    setEl('matrixJwtEddsaOps', `${formatNumber(jwtEddsa.performance.roundtrip.opsSec)} ops/s`);
+    setEl('matrixJwtEddsaLat', `${jwtEddsa.performance.roundtrip.avgLatencyMs} ms`);
+    setEl('matrixJwtEddsaSize', `${jwtEddsa.byteSize} Bytes`);
+  }
+  if (pasetoLoc) {
+    setEl('matrixPasetoLocOps', `${formatNumber(pasetoLoc.performance.roundtrip.opsSec)} ops/s`);
+    setEl('matrixPasetoLocLat', `${pasetoLoc.performance.roundtrip.avgLatencyMs} ms`);
+    setEl('matrixPasetoLocSize', `${pasetoLoc.byteSize} Bytes`);
+  }
+  if (pasetoPub) {
+    setEl('matrixPasetoPubOps', `${formatNumber(pasetoPub.performance.roundtrip.opsSec)} ops/s`);
+    setEl('matrixPasetoPubLat', `${pasetoPub.performance.roundtrip.avgLatencyMs} ms`);
+    setEl('matrixPasetoPubSize', `${pasetoPub.byteSize} Bytes`);
+  }
 }
 
 function updateTokenInspector() {
@@ -263,12 +326,13 @@ function updateTokenInspector() {
   let currentRawToken = '';
   if (activeTokenTab === 'jwt') {
     currentRawToken = results.jwtHs.token;
+  } else if (activeTokenTab === 'jwtEddsa') {
+    currentRawToken = results.jwtEddsa?.token;
   } else if (activeTokenTab === 'pasetoLoc') {
     currentRawToken = results.pasetoLoc.token;
   } else if (activeTokenTab === 'pasetoPub') {
     currentRawToken = results.pasetoPub.token;
   }
-
   tokenPreviewCode.textContent = currentRawToken || '-';
 }
 
@@ -277,8 +341,8 @@ async function runBenchmark(customRounds = null) {
   const preset = presetSelect ? presetSelect.value : 'standard';
 
   runBtn.disabled = true;
-  quickBtn.disabled = true;
-  runBtnText.textContent = `Menguji ${rounds} Putaran...`;
+  if (quickBtn) quickBtn.disabled = true;
+  runBtnText.textContent = 'Menguji Benchmark...';
   progressWrap.hidden = false;
   progressBar.style.width = '30%';
 
@@ -303,12 +367,9 @@ async function runBenchmark(customRounds = null) {
     if (data.benchmarkMeta) {
       rawSizeLabel.textContent = `${data.benchmarkMeta.rawPayloadBytes} Bytes`;
       if (data.benchmarkMeta.environment) {
-        const env = data.benchmarkMeta.environment;
-        envNode.textContent = `${env.javaVersion || 'Java 21 / Spring Boot 3'} (${env.platform} / ${env.arch})`;
-        envArch.textContent = `${env.cpus} CPU Cores`;
+        renderEnvironmentBadge(data.benchmarkMeta.environment);
       }
     }
-
     // Render 3 Visual Graphs & KPIs
     updateKpiCards(data.results);
     updateCharts(data);
@@ -320,8 +381,8 @@ async function runBenchmark(customRounds = null) {
       progressWrap.hidden = true;
       progressBar.style.width = '0%';
       runBtn.disabled = false;
-      quickBtn.disabled = false;
-      runBtnText.innerHTML = '&#9889; Jalankan Benchmark (10x Sampel)';
+      if (quickBtn) quickBtn.disabled = false;
+      runBtnText.textContent = 'Jalankan Benchmark';
     }, 400);
   }
 }
@@ -337,13 +398,29 @@ tokenTabs.addEventListener('click', (event) => {
 });
 
 runBtn.addEventListener('click', () => runBenchmark());
-quickBtn.addEventListener('click', () => {
-  if (roundsSelect) roundsSelect.value = '10';
-  runBenchmark(10);
-});
 
-// Auto-run initial benchmark on page load (10 rounds)
-runBenchmark(10);
+// Render environment badge immediately on page load without waiting for benchmark trigger
+function renderEnvironmentBadge(env) {
+  if (!env) return;
+  const jVersion = env.javaVersion || '17';
+  const sVersion = env.springBootVersion ? ` / Spring Boot ${env.springBootVersion}` : '';
+  if (envNode) envNode.textContent = `Java ${jVersion}${sVersion}`;
+  const cpuName = env.cpuModel || env.arch;
+  const osText = env.platform ? ` \u2022 ${env.platform}` : '';
+  if (envArch) envArch.textContent = `${env.cpus} CPU Cores \u2022 ${cpuName}${osText}`;
+}
+
+async function loadEnvironmentImmediately() {
+  try {
+    const res = await fetch('/api/benchmark/environment');
+    if (res.ok) {
+      const env = await res.json();
+      renderEnvironmentBadge(env);
+    }
+  } catch (e) {}
+}
+
+loadEnvironmentImmediately();
 
 /* ============================================================================
    COACH MARK / GUIDED TOUR BENCHMARK
@@ -357,7 +434,7 @@ const benchmarkTourSteps = [
   {
     element: '#kpiGrid',
     title: 'Langkah 2: Throughput Riil (Ops/Detik)',
-    description: 'Kartu metrik utama menampilkan rata-rata operasi per detik: <strong>JWT HS256</strong> (HMAC), <strong>PASETO v4.local</strong> (ChaCha20-Poly1305), dan <strong>PASETO v4.public</strong> (Ed25519).'
+    description: 'Kartu metrik utama menampilkan rata-rata operasi per detik: <strong>JWT HS256</strong> (HMAC), <strong>JWT EdDSA</strong> (Ed25519), <strong>PASETO v4.local</strong> (XChaCha20 + BLAKE2b-MAC), dan <strong>PASETO v4.public</strong> (Ed25519).'
   },
   {
     element: '.charts-container',
