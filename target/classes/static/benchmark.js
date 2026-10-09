@@ -297,25 +297,41 @@ function updateCharts(data) {
     if (el) el.textContent = txt;
   };
 
-  if (jwtHs) {
+  if (jwtHs && jwtEddsa) {
     setEl('matrixJwtHsOps', `${formatNumber(jwtHs.performance.roundtrip.opsSec)} ops/s`);
     setEl('matrixJwtHsLat', `${jwtHs.performance.roundtrip.avgLatencyMs} ms`);
     setEl('matrixJwtHsSize', `${jwtHs.byteSize} Bytes`);
-  }
-  if (jwtEddsa) {
+    setEl('matrixJwtHsOverhead', `+${jwtHs.overheadBytes} B (+${jwtHs.overheadPercentage}% dari raw JSON)`);
+
     setEl('matrixJwtEddsaOps', `${formatNumber(jwtEddsa.performance.roundtrip.opsSec)} ops/s`);
     setEl('matrixJwtEddsaLat', `${jwtEddsa.performance.roundtrip.avgLatencyMs} ms`);
     setEl('matrixJwtEddsaSize', `${jwtEddsa.byteSize} Bytes`);
+    setEl('matrixJwtEddsaOverhead', `+${jwtEddsa.overheadBytes} B (+${jwtEddsa.overheadPercentage}% dari raw JSON)`);
+
+    setEl('matrixJwtOverheadBadge', `Overhead +${jwtHs.overheadPercentage}% s/d +${jwtEddsa.overheadPercentage}% dari Raw JSON`);
   }
-  if (pasetoLoc) {
+
+  if (pasetoLoc && pasetoPub) {
     setEl('matrixPasetoLocOps', `${formatNumber(pasetoLoc.performance.roundtrip.opsSec)} ops/s`);
     setEl('matrixPasetoLocLat', `${pasetoLoc.performance.roundtrip.avgLatencyMs} ms`);
     setEl('matrixPasetoLocSize', `${pasetoLoc.byteSize} Bytes`);
-  }
-  if (pasetoPub) {
+    setEl('matrixPasetoLocOverhead', `+${pasetoLoc.overheadBytes} B (+${pasetoLoc.overheadPercentage}% dari raw JSON)`);
+
     setEl('matrixPasetoPubOps', `${formatNumber(pasetoPub.performance.roundtrip.opsSec)} ops/s`);
     setEl('matrixPasetoPubLat', `${pasetoPub.performance.roundtrip.avgLatencyMs} ms`);
     setEl('matrixPasetoPubSize', `${pasetoPub.byteSize} Bytes`);
+    setEl('matrixPasetoPubOverhead', `+${pasetoPub.overheadBytes} B (+${pasetoPub.overheadPercentage}% dari raw JSON)`);
+
+    setEl('matrixPasetoOverheadBadge', `Overhead +${pasetoLoc.overheadPercentage}% s/d +${pasetoPub.overheadPercentage}% dari Raw JSON`);
+
+    if (jwtEddsa) {
+      const diff = jwtEddsa.byteSize - pasetoPub.byteSize;
+      if (diff > 0) {
+        setEl('matrixPasetoDiffNote', `Pada mode Ed25519, PASETO v4.public justru ${diff} Byte LEBIH KECIL dari JWT EdDSA (${pasetoPub.byteSize} B vs ${jwtEddsa.byteSize} B)!`);
+      } else {
+        setEl('matrixPasetoDiffNote', `Pada mode Ed25519, ukuran PASETO v4.public setara dengan JWT EdDSA (${pasetoPub.byteSize} B vs ${jwtEddsa.byteSize} B).`);
+      }
+    }
   }
 }
 
